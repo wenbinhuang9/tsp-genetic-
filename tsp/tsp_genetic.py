@@ -1,37 +1,102 @@
-
 import random
-class Indivisual():
-    def __init__(self, gene):
-        self.gene = gene
+
+## my best answer 3513
+class Individual():
+    def __init__(self, chromosome):
+        self.chromosome = chromosome
         self.fitness = None
-## todo do the final test
-## todo add selection rate?
+
 class Genetic_TSP():
     ## the curcuit always begins from the 0 city
     def __init__(self, city_distance_data = None,
-                 city_number = 27, population_count = 10,
-                 cross_rate = 0.8, mutation_rate = 0.1):
-        self.city_distance_data = city_distance_data
-        self.city_number = city_number
+                 city_number = 27, population_length = 10,
+                 cross_rate = 0.8, mutation_rate = 0.1, kth_selection = 7):
+        ##tuning arguments
+        self.kth_selection = kth_selection
         self.cross_rate = cross_rate
         self.mutation_rate = mutation_rate
-        self.population_count = population_count
-        self.init_population_randomly(city_number, population_count)
-        self.k = 7
-        self.population = []
+        self.population_length = population_length
 
-    def init_population_randomly(self, city_num, population_count):
+        ## city distance data
+        self.city_distance_data = city_distance_data
+        self.city_number = city_number
+
+        ## population initialization
+        self.population = []
+        ## store all generations
+        self.generations = []
+        self.init_population(city_number, population_length)
+
+    def selection(self):
+        k_lowest_individual_chosen = self.cal_k_lowest_individual_chosen()
+        new_population = []
+
+        for i in range(self.population_length):
+            r = random.randrange(0, self.kth_selection)
+            new_population.append(k_lowest_individual_chosen[r])
+
+        return new_population
+
+    def crossover(self):
+        r = random.uniform(0, 1)
+
+        parent1 = self.get_parent_random()
+        parent2 = self.get_parent_random()
+        if r > self.cross_rate:
+            return (parent1, parent2)
+
+        parent1_chromosome = parent1.chromosome
+        parent2_chromosome = parent2.chromosome
+
+        start, end = self.gen_crossover_position(len(parent1_chromosome))
+        child1 = self.gen_new_child(parent1_chromosome, start, end, parent2_chromosome[start:end])
+        child2 = self.gen_new_child(parent2_chromosome, start, end, parent1_chromosome[start:end])
+
+        return (self.gen_individual(child1), self.gen_individual(child2))
+
+    def mutation(self, indivisual):
+        r = random.uniform(0, 1)
+        if r < self.mutation_rate:
+            start, end = self.gen_crossover_position(len(indivisual.chromosome))
+
+            indivisual.chromosome[start], indivisual.chromosome[end] = indivisual.chromosome[end], indivisual.chromosome[start]
+
+    def next_generation(self):
+        self.population = self.selection()
+
+        new_generation = []
+        for i in range(self.population_length / 2):
+            child1, child2 = self.crossover()
+            new_generation.extend([child1, child2])
+
+        for individual in new_generation:
+            self.mutation(individual)
+
+        self.population = new_generation
+
+    def run(self, iteration_times):
+        i = 0
+        while i < iteration_times:
+            self.next_generation()
+            i += 1
+
+        return self.best()
+
+    def best(self):
+        return self.cal_k_lowest_individual_chosen()[0]
+
+    def init_population(self, city_num, population_count):
         for i in range(population_count):
-            gene = range(1, city_num)
-            random.shuffle(gene)
-            ind = self.gen_indivisual(gene)
+            chromosome = range(1, city_num)
+            ## randomize chromosome
+            random.shuffle(chromosome)
+            ind = self.gen_individual(chromosome)
             self.population.append(ind)
 
-
-    def cal_tsp_distance(self, gene):
+    def cal_tsp_distance(self, chromosome):
         distance = 0
         previous_city_no = 0
-        for cur_city_no in gene:
+        for cur_city_no in chromosome:
             distance += self.city_distance_data[previous_city_no][cur_city_no]
             previous_city_no = cur_city_no
 
@@ -39,31 +104,20 @@ class Genetic_TSP():
 
         return distance
 
-    def fitness(self, indivisual):
-        indivisual.fitness = self.cal_tsp_distance(indivisual.gene)
+    def fitness(self, individual):
+        individual.fitness = self.cal_tsp_distance(individual.chromosome)
 
-    def cal_k_lowest_indivisual_chosen(self):
+    def cal_k_lowest_individual_chosen(self):
         self.population.sort(key=lambda x: x.fitness)
-        return self.population[:self.k + 1]
+        return self.population[:self.kth_selection + 1]
 
-
-    def select(self):
-        k_lowest_indivisual_chosen = self.cal_k_lowest_indivisual_chosen()
-        new_population = []
-
-        for i in range(self.population_count):
-            r = random.randrange(0, self.k)
-            new_population.append(k_lowest_indivisual_chosen[r])
-
-        return new_population
-
-    def gen_crossover_position(self, gen_len):
-        start = random.randrange(0, gen_len)
-        end = random.randrange(start, gen_len)
+    def gen_crossover_position(self, chromosome_len):
+        start = random.randrange(0, chromosome_len)
+        end = random.randrange(start, chromosome_len)
         return (start, end)
 
     def get_parent_random(self):
-        idx = random.randrange(0, self.population_count)
+        idx = random.randrange(0, self.population_length)
 
         return self.population[idx]
 
@@ -81,77 +135,22 @@ class Genetic_TSP():
         child.extend(replace_gene)
         child.extend(parent[end:])
         origin_gene_idx = 0
-        ## todo bug here
         for i in range(0, start):
             if child[i] in replace_gene_set:
-                if origin_gene_idx >= len(origin_gene):
-                    print("here")
                 child[i] = origin_gene[origin_gene_idx]
                 origin_gene_idx += 1
 
         for i in range(end, len(child)):
             if child[i] in replace_gene_set:
-                if origin_gene_idx >= len(origin_gene):
-                    print("here")
                 child[i] = origin_gene[origin_gene_idx]
                 origin_gene_idx += 1
 
-        if self.is_valid_child(child) == False:
-            print("here")
         return child
 
-    def is_valid_child(self, gene):
-        s = set(gene)
-        return len(gene) == len(s)
-    def next_generation(self):
-        self.population = self.select()
+    def gen_individual(self, chromosome):
+        individual = Individual(chromosome)
+        self.fitness(individual)
 
-        new_generation = []
-        for i in range(self.population_count/2):
-            child1, chil2 = self.crossover()
-            new_generation.extend([child1, chil2])
+        return individual
 
-        for indivisual in new_generation:
-            self.mutation(indivisual)
 
-        self.population = new_generation
-
-    def gen_indivisual(self, child_gene):
-        i = Indivisual(child_gene)
-        i.fitness = self.cal_tsp_distance(child_gene)
-
-        return i
-    def crossover(self):
-        r = random.uniform(0, 1)
-
-        parent1 = self.get_parent_random()
-        parent2 = self.get_parent_random()
-        if r > self.cross_rate:
-            return (parent1, parent2)
-
-        parent1_gene = parent1.gene
-        parent2_gene = parent2.gene
-
-        start, end = self.gen_crossover_position(len(parent1_gene))
-        child1 = self.gen_new_child(parent1_gene, start, end, parent2_gene[start:end])
-        child2 = self.gen_new_child(parent2_gene, start, end, parent1_gene[start:end])
-
-        return (self.gen_indivisual(child1), self.gen_indivisual(child2))
-
-    def mutation(self, indivisual):
-        r = random.uniform(0, 1)
-        if r < self.mutation_rate:
-            start, end = self.gen_crossover_position(len(indivisual.gene))
-
-            indivisual.gene[start], indivisual.gene[end] = indivisual.gene[end], indivisual.gene[start]
-
-    def best(self):
-        return self.cal_k_lowest_indivisual_chosen()[0]
-
-    def run(self, iteration_times):
-        i = 0
-        while i < iteration_times:
-            self.next_generation()
-            i += 1
-
-        return self.best()
